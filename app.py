@@ -23,6 +23,10 @@ def main():
             # Let's move sidebar definition to the top of main() or use st.session_state.
             pass 
             
+    # Initialize processing state
+    if "processing_complete" not in st.session_state:
+        st.session_state.processing_complete = False
+
     # Refactoring main to define sidebar first to capture model selection
     with st.sidebar:
         st.title("Menu:")
@@ -35,6 +39,10 @@ def main():
         selected_model = model_mapping[selected_model_name]
         
         pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+        
+        if not pdf_docs:
+            st.session_state.processing_complete = False
+            
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
                 if not pdf_docs:
@@ -43,23 +51,27 @@ def main():
                     raw_text = get_pdf_text(pdf_docs)
                     text_chunks = get_text_chunks(raw_text)
                     get_vector_store(text_chunks)
+                    st.session_state.processing_complete = True
                     st.success("Done")
 
     # React to user input (Main area)
-    if prompt := st.chat_input("Ask a Question from the PDF Files"):
-        # Display user message in chat message container
-        st.chat_message("user").markdown(prompt)
-        # Add user message to chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
+    if st.session_state.processing_complete:
+        if prompt := st.chat_input("Ask a Question from the PDF Files"):
+            # Display user message in chat message container
+            st.chat_message("user").markdown(prompt)
+            # Add user message to chat history
+            st.session_state.messages.append({"role": "user", "content": prompt})
 
-        with st.spinner("Thinking..."):
-            response = user_input(prompt, selected_model)
-            
-        # Display assistant response in chat message container
-        with st.chat_message("assistant"):
-            st.markdown(response)
-        # Add assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            with st.spinner("Thinking..."):
+                response = user_input(prompt, selected_model)
+                
+            # Display assistant response in chat message container
+            with st.chat_message("assistant"):
+                st.markdown(response)
+            # Add assistant response to chat history
+            st.session_state.messages.append({"role": "assistant", "content": response})
+    else:
+        st.info("Please upload and process PDF files to start chatting.")
 
 if __name__ == "__main__":
     main()

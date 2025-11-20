@@ -1,5 +1,6 @@
 import streamlit as st
 from rag_engine import get_documents_text, get_text_chunks, get_vector_store, user_input
+from chat_utils import load_chat_history, save_chat_session, get_new_session_id
 
 def main():
     st.set_page_config("Chat Document")
@@ -23,9 +24,9 @@ def main():
             # Let's move sidebar definition to the top of main() or use st.session_state.
             pass 
             
-    # Initialize processing state
-    if "processing_complete" not in st.session_state:
-        st.session_state.processing_complete = False
+    # Initialize session ID
+    if "session_id" not in st.session_state:
+        st.session_state.session_id = get_new_session_id()
 
     # Custom CSS for styling
     st.markdown("""
@@ -51,12 +52,31 @@ def main():
         .stRadio {
             margin-bottom: 1rem;
         }
+        
+        /* History button styling */
+        .history-btn {
+            text-align: left;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            margin-bottom: 0.2rem;
+        }
+        .history-btn:hover {
+            background-color: #f0f2f6;
+        }
         </style>
     """, unsafe_allow_html=True)
 
     # Refactoring main to define sidebar first to capture model selection
     with st.sidebar:
         st.title("Menu:")
+        
+        # New Chat Button
+        if st.button("➕ New Chat"):
+            st.session_state.messages = []
+            st.session_state.session_id = get_new_session_id()
+            st.rerun()
+
         model_mapping = {
             "GPT-OSS": "openai/gpt-oss-20b:free",
             "Deepseek": "deepseek/deepseek-chat-v3-0324:free",
@@ -93,6 +113,15 @@ def main():
                     st.session_state.processing_complete = True
                     st.success("Done")
 
+        st.markdown("---")
+        st.subheader("History (Last 7 Days)")
+        history = load_chat_history()
+        for session in history:
+            if st.button(session["title"], key=session["id"], help=session["timestamp"]):
+                st.session_state.messages = session["messages"]
+                st.session_state.session_id = session["id"]
+                st.rerun()
+
     # React to user input (Main area)
     if st.session_state.processing_complete:
         if prompt := st.chat_input("Ask a Question from the Files"):
@@ -100,6 +129,9 @@ def main():
             st.chat_message("user").markdown(prompt)
             # Add user message to chat history
             st.session_state.messages.append({"role": "user", "content": prompt})
+            
+            # Save chat history
+            save_chat_session(st.session_state.session_id, st.session_state.messages)
 
             with st.spinner("Thinking..."):
                 response = user_input(prompt, selected_model)
@@ -109,6 +141,9 @@ def main():
                 st.markdown(response)
             # Add assistant response to chat history
             st.session_state.messages.append({"role": "assistant", "content": response})
+            
+            # Save chat history again with response
+            save_chat_session(st.session_state.session_id, st.session_state.messages)
     else:
         st.info("Please upload and process Documents to start chatting.")
 

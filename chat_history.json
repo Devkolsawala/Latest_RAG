@@ -1,0 +1,19 @@
+{
+    "sessions": [
+        {
+            "id": "161b1d84-849e-4b07-a507-a87ee92d8dcb",
+            "timestamp": "2025-11-20T14:27:10.675809",
+            "title": "summarize the document...",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "summarize the document"
+                },
+                {
+                    "role": "assistant",
+                    "content": "**Summary of the OneDrive Overview**\n\n- **Purpose & Access**  \n  OneDrive is Microsoft\u2019s cloud storage service that keeps files protected, backed\u2011up, and accessible from any device (desktop, mobile, web). Users can log in via OneDrive.com or the OneDrive mobile app.\n\n- **Storage Options**  \n  - Free tier: 5\u202fGB of cloud storage.  \n  - Microsoft\u202f365 subscription: 1\u202fTB of storage plus additional Office apps.\n\n- **Key Features**  \n  - **PC Folder Backup** \u2013 Automatically syncs Desktop, Documents, and Pictures folders to OneDrive.  \n  - **Office Integration** \u2013 Seamless use of Word, PowerPoint, and Excel for free in the browser; files can be created, edited, and shared directly from OneDrive.  \n  - **Sharing & Collaboration** \u2013 Share documents, folders, or photos with anyone; recipients don\u2019t need a Microsoft account to view or edit in real\u2011time.  \n  - **Security** \u2013 Includes Personal Vault, ransomware detection and recovery, file encryption, and other protection measures (requires Microsoft\u202f365 Personal or Family subscription for full features).  \n\n- **Mobile App Capabilities**  \n  - **Automatic Camera Backup** \u2013 iOS and Android phones can automatically upload photos and videos.  \n  - **Scan & Save** \u2013 Use the phone\u2019s camera to scan paper documents, receipts, or whiteboard notes and store them in OneDrive.  \n\n- **Additional Resources**  \n  - OneDrive Help Center for support.  \n  - Links to learn more about uploading files, sharing, and using Office for the web.  \n\nOverall, OneDrive offers a secure, integrated cloud storage solution that supports file backup, collaboration, and mobile productivity across devices."
+                }
+            ]
+        }
+    ]
+}

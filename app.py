@@ -71,7 +71,7 @@ def main():
             # Add assistant response to chat history
             st.session_state.messages.append({"role": "assistant", "content": response})
     else:
-        st.info("Please upload and process PDF files to start chatting.")
+        st.info("Please upload and process Documents to start chatting.")
 
 if __name__ == "__main__":
     main()

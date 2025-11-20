@@ -27,6 +27,33 @@ def main():
     if "processing_complete" not in st.session_state:
         st.session_state.processing_complete = False
 
+    # Custom CSS for styling
+    st.markdown("""
+        <style>
+        /* Red background for Submit & Process button in sidebar */
+        [data-testid="stSidebar"] .stButton > button {
+            background-color: #ff4b4b;
+            color: white;
+            border: none;
+            width: 100%;
+        }
+        [data-testid="stSidebar"] .stButton > button:hover {
+            background-color: #ff3333;
+            color: white;
+        }
+        
+        /* Reduce top padding in sidebar to shift Menu up */
+        [data-testid="stSidebarUserContent"] {
+            padding-top: 1rem;
+        }
+        
+        /* Improve spacing */
+        .stRadio {
+            margin-bottom: 1rem;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # Refactoring main to define sidebar first to capture model selection
     with st.sidebar:
         st.title("Menu:")
@@ -35,7 +62,19 @@ def main():
             "Deepseek": "deepseek/deepseek-chat-v3-0324:free",
             "Quen - 3": "qwen/qwen3-coder:free"
         }
-        selected_model_name = st.selectbox("Select Model", list(model_mapping.keys()))
+        
+        if "selected_model_name" not in st.session_state:
+            st.session_state.selected_model_name = list(model_mapping.keys())[0]
+
+        def on_model_change():
+            st.toast(f"Model changed to {st.session_state.model_radio}", icon="✅")
+
+        selected_model_name = st.radio(
+            "Select Model", 
+            list(model_mapping.keys()), 
+            key="model_radio", 
+            on_change=on_model_change
+        )
         selected_model = model_mapping[selected_model_name]
         
         pdf_docs = st.file_uploader("Upload your Files (PDF, DOCX, TXT) and Click on the Submit & Process Button", accept_multiple_files=True, type=["pdf", "docx", "txt"])

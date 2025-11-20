@@ -1,6 +1,7 @@
 import streamlit as st
 from rag_engine import get_documents_text, get_text_chunks, get_vector_store, user_input
-from chat_utils import load_chat_history, save_chat_session, get_new_session_id
+from chat_utils import load_chat_history, save_chat_session, get_new_session_id, delete_chat_session
+from datetime import datetime, timedelta
 
 def main():
     st.set_page_config("Chat Document")
@@ -24,6 +25,22 @@ def main():
             # Let's move sidebar definition to the top of main() or use st.session_state.
             pass 
             
+    # Initialize Cookie Manager
+    import extra_streamlit_components as stx
+    import uuid
+    
+    # We need to use a key to avoid component re-initialization issues
+    cookie_manager = stx.CookieManager(key="cookie_manager")
+    
+    # Get device_id from cookie or create new one
+    # Note: cookie_manager.get_all() might be needed to ensure cookies are loaded
+    cookies = cookie_manager.get_all()
+    device_id = cookies.get("device_id")
+    
+    if not device_id:
+        device_id = str(uuid.uuid4())
+        cookie_manager.set("device_id", device_id, expires_at=datetime.now() + timedelta(days=365))
+    
     # Initialize session ID
     if "session_id" not in st.session_state:
         st.session_state.session_id = get_new_session_id()
@@ -115,12 +132,27 @@ def main():
 
         st.markdown("---")
         st.subheader("History (Last 7 Days)")
-        history = load_chat_history()
+        
+        # Load history for this device_id
+        history = load_chat_history(user_id=device_id)
+        
+        if not history:
+            st.caption("No recent history.")
+        
         for session in history:
-            if st.button(session["title"], key=session["id"], help=session["timestamp"]):
-                st.session_state.messages = session["messages"]
-                st.session_state.session_id = session["id"]
-                st.rerun()
+            col1, col2 = st.columns([0.8, 0.2])
+            with col1:
+                if st.button(session["title"], key=f"load_{session['id']}", help=session["timestamp"], use_container_width=True):
+                    st.session_state.messages = session["messages"]
+                    st.session_state.session_id = session["id"]
+                    st.rerun()
+            with col2:
+                if st.button("🗑️", key=f"del_{session['id']}", help="Delete Chat"):
+                    delete_chat_session(session["id"])
+                    if st.session_state.session_id == session["id"]:
+                        st.session_state.messages = []
+                        st.session_state.session_id = get_new_session_id()
+                    st.rerun()
 
     # React to user input (Main area)
     if st.session_state.processing_complete:
@@ -131,7 +163,7 @@ def main():
             st.session_state.messages.append({"role": "user", "content": prompt})
             
             # Save chat history
-            save_chat_session(st.session_state.session_id, st.session_state.messages)
+            save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
 
             with st.spinner("Thinking..."):
                 response = user_input(prompt, selected_model)
@@ -143,7 +175,7 @@ def main():
             st.session_state.messages.append({"role": "assistant", "content": response})
             
             # Save chat history again with response
-            save_chat_session(st.session_state.session_id, st.session_state.messages)
+            save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
     else:
         st.info("Please upload and process Documents to start chatting.")
 

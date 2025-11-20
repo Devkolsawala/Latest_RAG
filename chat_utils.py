@@ -5,8 +5,8 @@ import uuid
 
 HISTORY_FILE = "chat_history.json"
 
-def load_chat_history():
-    """Loads chat history from JSON file, filtering out sessions older than 7 days."""
+def load_chat_history(user_id=None):
+    """Loads chat history from JSON file, filtering out sessions older than 7 days and by user_id."""
     if not os.path.exists(HISTORY_FILE):
         return []
 
@@ -25,7 +25,16 @@ def load_chat_history():
         try:
             session_date = datetime.fromisoformat(session["timestamp"])
             if session_date > seven_days_ago:
-                valid_sessions.append(session)
+                # Filter by user_id if provided
+                if user_id:
+                    if session.get("user_id") == user_id:
+                        valid_sessions.append(session)
+                else:
+                    # If no user_id provided (legacy or admin), maybe show all? 
+                    # For now, let's assume we only show if user_id matches or session has no user_id (legacy)
+                    # But to be strict for "device only", we should only show matches.
+                    # Let's assume if user_id is passed, we strictly filter.
+                    valid_sessions.append(session)
         except (ValueError, KeyError):
             continue
             
@@ -34,9 +43,18 @@ def load_chat_history():
     
     return valid_sessions
 
-def save_chat_session(session_id, messages, title=None):
+def save_chat_session(session_id, messages, user_id=None, title=None):
     """Saves or updates a chat session."""
-    sessions = load_chat_history()
+    # Load ALL sessions to avoid overwriting others
+    if not os.path.exists(HISTORY_FILE):
+        sessions = []
+    else:
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                data = json.load(f)
+                sessions = data.get("sessions", [])
+        except (json.JSONDecodeError, IOError):
+            sessions = []
     
     # Check if session exists
     existing_session = next((s for s in sessions if s["id"] == session_id), None)
@@ -56,10 +74,12 @@ def save_chat_session(session_id, messages, title=None):
     if existing_session:
         existing_session["messages"] = messages
         existing_session["timestamp"] = timestamp # Update timestamp on new activity
-        # Keep existing title unless specifically updated logic (omitted for simplicity)
+        if user_id and "user_id" not in existing_session:
+             existing_session["user_id"] = user_id
     else:
         new_session = {
             "id": session_id,
+            "user_id": user_id,
             "timestamp": timestamp,
             "title": title,
             "messages": messages
@@ -76,7 +96,17 @@ def get_new_session_id():
     return str(uuid.uuid4())
 
 def delete_chat_session(session_id):
-    sessions = load_chat_history()
+    # Load ALL sessions
+    if not os.path.exists(HISTORY_FILE):
+        return
+
+    try:
+        with open(HISTORY_FILE, "r") as f:
+            data = json.load(f)
+            sessions = data.get("sessions", [])
+    except (json.JSONDecodeError, IOError):
+        return
+
     sessions = [s for s in sessions if s["id"] != session_id]
     try:
         with open(HISTORY_FILE, "w") as f:

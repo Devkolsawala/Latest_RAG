@@ -2,8 +2,8 @@ import streamlit as st
 from rag_engine import get_documents_text, get_text_chunks, get_vector_store, user_input
 
 def main():
-    st.set_page_config("Chat PDF")
-    st.header("Chat with PDF ")
+    st.set_page_config("Chat Document")
+    st.header("Chat with Documents ")
 
     # Initialize chat history
     if "messages" not in st.session_state:

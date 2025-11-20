@@ -96,7 +96,7 @@ def main():
 
         model_mapping = {
             "GPT-OSS": "openai/gpt-oss-20b:free",
-            "Deepseek": "deepseek/deepseek-chat-v3-0324:free",
+            # "Deepseek": "deepseek/deepseek-chat-v3-0324:free",
             "Quen - 3": "qwen/qwen3-coder:free"
         }
         

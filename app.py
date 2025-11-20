@@ -1,5 +1,5 @@
 import streamlit as st
-from rag_engine import get_pdf_text, get_text_chunks, get_vector_store, user_input
+from rag_engine import get_documents_text, get_text_chunks, get_vector_store, user_input
 
 def main():
     st.set_page_config("Chat PDF")
@@ -38,7 +38,7 @@ def main():
         selected_model_name = st.selectbox("Select Model", list(model_mapping.keys()))
         selected_model = model_mapping[selected_model_name]
         
-        pdf_docs = st.file_uploader("Upload your PDF Files and Click on the Submit & Process Button", accept_multiple_files=True)
+        pdf_docs = st.file_uploader("Upload your Files (PDF, DOCX, TXT) and Click on the Submit & Process Button", accept_multiple_files=True, type=["pdf", "docx", "txt"])
         
         if not pdf_docs:
             st.session_state.processing_complete = False
@@ -46,9 +46,9 @@ def main():
         if st.button("Submit & Process"):
             with st.spinner("Processing..."):
                 if not pdf_docs:
-                    st.error("Please upload at least one PDF file.")
+                    st.error("Please upload at least one file.")
                 else:
-                    raw_text = get_pdf_text(pdf_docs)
+                    raw_text = get_documents_text(pdf_docs)
                     text_chunks = get_text_chunks(raw_text)
                     get_vector_store(text_chunks)
                     st.session_state.processing_complete = True
@@ -56,7 +56,7 @@ def main():
 
     # React to user input (Main area)
     if st.session_state.processing_complete:
-        if prompt := st.chat_input("Ask a Question from the PDF Files"):
+        if prompt := st.chat_input("Ask a Question from the Files"):
             # Display user message in chat message container
             st.chat_message("user").markdown(prompt)
             # Add user message to chat history

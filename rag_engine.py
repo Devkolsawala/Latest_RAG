@@ -10,12 +10,22 @@ from langchain_core.prompts import PromptTemplate
 
 load_dotenv()
 
-def get_pdf_text(pdf_docs):
+from docx import Document
+
+def get_documents_text(docs):
     text = ""
-    for pdf in pdf_docs:
-        pdf_reader = PdfReader(pdf)
-        for page in pdf_reader.pages:
-            text += page.extract_text()
+    for doc in docs:
+        file_name = doc.name
+        if file_name.endswith(".pdf"):
+            pdf_reader = PdfReader(doc)
+            for page in pdf_reader.pages:
+                text += page.extract_text()
+        elif file_name.endswith(".docx"):
+            doc_file = Document(doc)
+            for para in doc_file.paragraphs:
+                text += para.text + "\n"
+        elif file_name.endswith(".txt"):
+            text += str(doc.read(), "utf-8")
     return text
 
 def get_text_chunks(text):

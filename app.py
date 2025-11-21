@@ -23,6 +23,8 @@ if "session_id" not in st.session_state:
     st.session_state.session_id = get_new_session_id()
 if "confirm_delete" not in st.session_state:
     st.session_state.confirm_delete = None
+if "uploader_key" not in st.session_state:
+    st.session_state.uploader_key = str(uuid.uuid4())
 
 # --- Device ID Management ---
 cookie_manager = stx.CookieManager(key="cookie_manager")
@@ -33,10 +35,8 @@ if not device_id:
     device_id = str(uuid.uuid4())
     cookie_manager.set("device_id", device_id, expires_at=datetime.now() + timedelta(days=365))
 
-# --- CSS & Theming Logic (Gemini Style) ---
+# --- CSS & Theming Logic ---
 def inject_custom_css():
-    """Injects CSS for a clean, Gemini-like aesthetic."""
-    
     bg_color = "#ffffff"
     sidebar_bg = "#f0f4f9"
     text_color = "#1f1f1f"
@@ -168,13 +168,14 @@ def render_sidebar():
         st.markdown("### ✨ DocChat")
         st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
 
-        # New Chat Button (Primary)
+        # New Chat Button
         st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
         if st.button("➕ New Chat", use_container_width=True):
             st.session_state.messages = []
             st.session_state.session_id = get_new_session_id()
-            st.session_state.processing_complete = False  # Reset processing state
+            st.session_state.processing_complete = False
             st.session_state.confirm_delete = None
+            st.session_state.uploader_key = str(uuid.uuid4())
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -186,7 +187,8 @@ def render_sidebar():
             "Upload PDF/DOCX/TXT",
             accept_multiple_files=True,
             type=["pdf", "docx", "txt"],
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key=st.session_state.uploader_key 
         )
         
         if pdf_docs:
@@ -195,7 +197,6 @@ def render_sidebar():
                 with st.spinner("Analyzing documents..."):
                     raw_text = get_documents_text(pdf_docs)
                     text_chunks = get_text_chunks(raw_text)
-                    # Pass session_id to create isolated vector store
                     get_vector_store(text_chunks, st.session_state.session_id)
                     st.session_state.processing_complete = True
                     st.toast("Documents processed successfully!", icon="✅")
@@ -235,14 +236,12 @@ def render_sidebar():
                                 st.session_state.messages = session["messages"]
                                 st.session_state.session_id = session["id"]
                                 st.session_state.confirm_delete = None
-                                
-                                # Check if vector store exists for this session
                                 index_path = f"faiss_indexes/{session['id']}"
                                 if os.path.exists(index_path):
                                     st.session_state.processing_complete = True
                                 else:
                                     st.session_state.processing_complete = False
-                                
+                                st.session_state.uploader_key = str(uuid.uuid4())
                                 st.rerun()
                                 
                         with col_del:
@@ -253,6 +252,7 @@ def render_sidebar():
                                         st.session_state.messages = []
                                         st.session_state.session_id = get_new_session_id()
                                         st.session_state.processing_complete = False
+                                        st.session_state.uploader_key = str(uuid.uuid4())
                                     st.session_state.confirm_delete = None
                                     st.rerun()
                             else:
@@ -298,25 +298,45 @@ def main():
                 with st.chat_message(message["role"], avatar=avatar):
                     st.markdown(message["content"])
 
-        if prompt := st.chat_input("Ask anything about your documents..."):
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            with st.chat_message("user", avatar="👤"):
-                st.markdown(prompt)
+        # --- CHAT LOGIC WITH DISABLED INPUT ---
+        
+        # 1. Check if the LAST message is from the User (means processing needed)
+        if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
             
-            save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
-
+            # RENDER DISABLED CHAT INPUT to show "Busy" state
+            st.chat_input("Thinking...", disabled=True)
+            
+            # Generate response immediately
             with st.chat_message("assistant", avatar="✨"):
                 with st.spinner("Thinking..."):
-                    # Pass session_id to use the correct vector store
-                    response = user_input(
-                        prompt, 
-                        st.session_state.get("selected_model", "openai/gpt-oss-20b:free"),
-                        st.session_state.session_id
-                    )
+                    try:
+                        response = user_input(
+                            st.session_state.messages[-1]["content"], 
+                            st.session_state.get("selected_model", "openai/gpt-oss-20b:free"),
+                            st.session_state.session_id
+                        )
+                    except Exception as e:
+                        response = f"⚠️ An error occurred: {str(e)}"
+                    
                     st.markdown(response)
             
             st.session_state.messages.append({"role": "assistant", "content": response})
             save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id, title=None)
+            st.rerun() # Force rerun to enable the chat input again
+
+        # 2. Idle State: Show active Input
+        else:
+            if prompt := st.chat_input("Ask anything about your documents..."):
+                # Add to state
+                st.session_state.messages.append({"role": "user", "content": prompt})
+                
+                # Optimistic UI update
+                with st.chat_message("user", avatar="👤"):
+                    st.markdown(prompt)
+                
+                save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
+                # Rerun immediately to switch to "Processing" state (Block 1)
+                st.rerun()
 
 if __name__ == "__main__":
     main()

@@ -1,12 +1,13 @@
 import json
 import os
+import shutil
 from datetime import datetime, timedelta
 import uuid
 
 HISTORY_FILE = "chat_history.json"
 
 def load_chat_history(user_id=None):
-    """Loads chat history from JSON file, filtering out sessions older than 7 days and by user_id."""
+    """Loads chat history, filters by user_id and 7-day retention."""
     if not os.path.exists(HISTORY_FILE):
         return []
 
@@ -30,10 +31,6 @@ def load_chat_history(user_id=None):
                     if session.get("user_id") == user_id:
                         valid_sessions.append(session)
                 else:
-                    # If no user_id provided (legacy or admin), maybe show all? 
-                    # For now, let's assume we only show if user_id matches or session has no user_id (legacy)
-                    # But to be strict for "device only", we should only show matches.
-                    # Let's assume if user_id is passed, we strictly filter.
                     valid_sessions.append(session)
         except (ValueError, KeyError):
             continue
@@ -43,9 +40,35 @@ def load_chat_history(user_id=None):
     
     return valid_sessions
 
+def group_chat_history(sessions):
+    """Groups sessions into Today, Yesterday, and Previous 7 Days."""
+    grouped = {
+        "Today": [],
+        "Yesterday": [],
+        "Previous 7 Days": []
+    }
+    
+    now = datetime.now().date()
+    yesterday = now - timedelta(days=1)
+    
+    for session in sessions:
+        try:
+            session_ts = datetime.fromisoformat(session["timestamp"])
+            session_date = session_ts.date()
+            
+            if session_date == now:
+                grouped["Today"].append(session)
+            elif session_date == yesterday:
+                grouped["Yesterday"].append(session)
+            else:
+                grouped["Previous 7 Days"].append(session)
+        except ValueError:
+            continue
+            
+    return grouped
+
 def save_chat_session(session_id, messages, user_id=None, title=None):
     """Saves or updates a chat session."""
-    # Load ALL sessions to avoid overwriting others
     if not os.path.exists(HISTORY_FILE):
         sessions = []
     else:
@@ -56,16 +79,14 @@ def save_chat_session(session_id, messages, user_id=None, title=None):
         except (json.JSONDecodeError, IOError):
             sessions = []
     
-    # Check if session exists
     existing_session = next((s for s in sessions if s["id"] == session_id), None)
-    
     timestamp = datetime.now().isoformat()
     
     if not title and messages:
-        # Generate simple title from first user message if not provided
         first_user_msg = next((m for m in messages if m["role"] == "user"), None)
         if first_user_msg:
-            title = first_user_msg["content"][:30] + "..."
+            clean_content = first_user_msg["content"][:35].strip()
+            title = clean_content + "..." if len(first_user_msg["content"]) > 35 else clean_content
         else:
             title = "New Chat"
     elif not title:
@@ -73,7 +94,9 @@ def save_chat_session(session_id, messages, user_id=None, title=None):
 
     if existing_session:
         existing_session["messages"] = messages
-        existing_session["timestamp"] = timestamp # Update timestamp on new activity
+        existing_session["timestamp"] = timestamp
+        if existing_session["title"] == "New Chat" and title != "New Chat":
+             existing_session["title"] = title
         if user_id and "user_id" not in existing_session:
              existing_session["user_id"] = user_id
     else:
@@ -96,20 +119,25 @@ def get_new_session_id():
     return str(uuid.uuid4())
 
 def delete_chat_session(session_id):
-    # Load ALL sessions
-    if not os.path.exists(HISTORY_FILE):
-        return
+    """Deletes chat session from JSON and removes associated vector store."""
+    # 1. Remove from JSON
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                data = json.load(f)
+                sessions = data.get("sessions", [])
+            
+            sessions = [s for s in sessions if s["id"] != session_id]
+            
+            with open(HISTORY_FILE, "w") as f:
+                json.dump({"sessions": sessions}, f, indent=4)
+        except (json.JSONDecodeError, IOError):
+            pass
 
-    try:
-        with open(HISTORY_FILE, "r") as f:
-            data = json.load(f)
-            sessions = data.get("sessions", [])
-    except (json.JSONDecodeError, IOError):
-        return
-
-    sessions = [s for s in sessions if s["id"] != session_id]
-    try:
-        with open(HISTORY_FILE, "w") as f:
-            json.dump({"sessions": sessions}, f, indent=4)
-    except IOError:
-        pass
+    # 2. Remove specific Vector Store folder
+    index_path = f"faiss_indexes/{session_id}"
+    if os.path.exists(index_path):
+        try:
+            shutil.rmtree(index_path)
+        except OSError:
+            pass

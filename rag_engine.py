@@ -33,10 +33,18 @@ def get_text_chunks(text):
     chunks = text_splitter.split_text(text)
     return chunks
 
-def get_vector_store(text_chunks):
+def get_vector_store(text_chunks, session_id):
+    """
+    Creates a vector store and saves it in a folder specific to the session_id.
+    """
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
-    vector_store.save_local("faiss_index")
+    
+    # Create directory if it doesn't exist
+    folder_path = f"faiss_indexes/{session_id}"
+    os.makedirs(folder_path, exist_ok=True)
+    
+    vector_store.save_local(folder_path)
 
 def get_conversational_chain(model_name):
     prompt_template = """
@@ -57,13 +65,19 @@ def get_conversational_chain(model_name):
     chain = load_qa_chain(model, chain_type="stuff", prompt=prompt)
     return chain
 
-def user_input(user_question, model_name):
+def user_input(user_question, model_name, session_id):
+    """
+    Loads the vector store specifically for the given session_id.
+    """
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    # Check if index exists
-    if not os.path.exists("faiss_index"):
-        return "Index not found. Please upload and process a PDF first."
+    
+    index_path = f"faiss_indexes/{session_id}"
+    
+    # Check if index exists for this specific session
+    if not os.path.exists(index_path):
+        return "Context not found for this session. Please upload documents to start."
         
-    new_db = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+    new_db = FAISS.load_local(index_path, embeddings, allow_dangerous_deserialization=True)
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain(model_name)
     response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)

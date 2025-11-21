@@ -58,19 +58,6 @@ def inject_custom_css():
             color: {text_color};
             background-color: {bg_color};
         }}
-        
-        [data-testid="stSidebar"] {{
-            background-color: {sidebar_bg};
-            border-right: none;
-        }}
-
-        header {{visibility: hidden;}}
-        #MainMenu {{visibility: hidden;}}
-        footer {{visibility: hidden;}}
-        
-        h1, h2, h3 {{
-            color: {text_color};
-            font-weight: 500;
         }}
         
         .stButton > button {{

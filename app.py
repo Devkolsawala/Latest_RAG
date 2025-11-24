@@ -156,7 +156,6 @@ def render_sidebar():
         st.markdown("### ✨ DocChat")
         st.markdown('<div style="height: 10px;"></div>', unsafe_allow_html=True)
 
-        # New Chat Button
         st.markdown('<div class="primary-btn">', unsafe_allow_html=True)
         if st.button("➕ New Chat", use_container_width=True):
             st.session_state.messages = []
@@ -169,7 +168,6 @@ def render_sidebar():
 
         st.divider()
 
-        # File Upload
         st.markdown("#### 📄 Documents")
         pdf_docs = st.file_uploader(
             "Upload PDF/DOCX/TXT",
@@ -192,7 +190,6 @@ def render_sidebar():
         
         st.divider()
 
-        # Chat History
         st.markdown("#### 🕒 Recent")
         history = load_chat_history(user_id=device_id)
         
@@ -250,7 +247,6 @@ def render_sidebar():
 
         st.divider()
         
-        # Mode Selection
         st.markdown("#### 🛠️ Mode")
         mode = st.radio(
             "Select Mode",
@@ -296,15 +292,36 @@ def main():
             video_path = tfile.name
             
             st.video(video_path)
-            
-            # Check duration
-            import cv2
-            cap = cv2.VideoCapture(video_path)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            duration = frame_count / fps if fps > 0 else 0
-            cap.release()
-            
+
+            # ---------------------------------------------------------
+            # OLD OPENCV CODE (NOT WORKING ON STREAMLIT CLOUD)
+            # ---------------------------------------------------------
+            # import cv2
+            # cap = cv2.VideoCapture(video_path)
+            # fps = cap.get(cv2.CAP_PROP_FPS)
+            # frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            # duration = frame_count / fps if fps > 0 else 0
+            # cap.release()
+
+            # ---------------------------------------------------------
+            # NEW STREAMLIT-SAFE VERSION — Uses imageio
+            # ---------------------------------------------------------
+            import imageio
+
+            try:
+                reader = imageio.get_reader(video_path)
+                meta = reader.get_meta_data()
+
+                fps = meta.get("fps", 30)
+                frame_count = reader.count_frames()
+
+                duration = frame_count / fps if fps > 0 else 0
+                reader.close()
+            except Exception as e:
+                duration = 0
+                st.error(f"Could not read video metadata: {str(e)}")
+
+            # Duration check
             if duration > 10:
                 st.error(f"⚠️ Video is too long ({duration:.1f}s). Please upload a video shorter than 10 seconds.")
             else:
@@ -341,15 +358,13 @@ def main():
                     with st.chat_message(message["role"], avatar=avatar):
                         st.markdown(message["content"])
 
-            # --- CHAT LOGIC WITH DISABLED INPUT ---
-            
-            # 1. Check if the LAST message is from the User (means processing needed)
+            # -------------------------------
+            # CHAT LOGIC WITH DISABLED INPUT
+            # -------------------------------
             if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
                 
-                # RENDER DISABLED CHAT INPUT to show "Busy" state
                 st.chat_input("Thinking...", disabled=True)
                 
-                # Generate response immediately
                 with st.chat_message("assistant", avatar="✨"):
                     with st.spinner("Thinking..."):
                         try:
@@ -365,20 +380,17 @@ def main():
                 
                 st.session_state.messages.append({"role": "assistant", "content": response})
                 save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id, title=None)
-                st.rerun() # Force rerun to enable the chat input again
+                st.rerun()
 
-            # 2. Idle State: Show active Input
+            # Idle state
             else:
                 if prompt := st.chat_input("Ask anything about your documents..."):
-                    # Add to state
                     st.session_state.messages.append({"role": "user", "content": prompt})
                     
-                    # Optimistic UI update
                     with st.chat_message("user", avatar="👤"):
                         st.markdown(prompt)
                     
                     save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
-                    # Rerun immediately to switch to "Processing" state (Block 1)
                     st.rerun()
 
 if __name__ == "__main__":

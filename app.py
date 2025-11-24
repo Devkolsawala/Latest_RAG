@@ -5,6 +5,8 @@ from chat_utils import load_chat_history, group_chat_history, save_chat_session,
 from datetime import datetime, timedelta
 import uuid
 import extra_streamlit_components as stx
+from video_utils import extract_frames, get_video_summary
+import tempfile
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -57,7 +59,6 @@ def inject_custom_css():
             font-family: 'Google Sans', 'Roboto', sans-serif;
             color: {text_color};
             background-color: {bg_color};
-        }}
         }}
         
         .stButton > button {{
@@ -249,15 +250,31 @@ def render_sidebar():
 
         st.divider()
         
-        with st.expander("⚙️ Settings"):
+        # Mode Selection
+        st.markdown("#### 🛠️ Mode")
+        mode = st.radio(
+            "Select Mode",
+            ["Chat with Documents", "Video Summarization"],
+            label_visibility="collapsed"
+        )
+        st.session_state.mode = mode
+
+        st.divider()
+        
+        st.markdown("#### 🤖 Model")
+        if mode == "Video Summarization":
+            st.info("Using Nvidia Nemotron")
+            st.session_state.selected_model = "nvidia/nemotron-nano-12b-v2-vl:free"
+        else:
             model_mapping = {
                 "GPT-OSS": "openai/gpt-oss-20b:free",
                 "Qwen 3": "qwen/qwen3-coder:free"
             }
             selected_model_name = st.radio(
-                "Model",
+                "Choose Model",
                 list(model_mapping.keys()),
-                horizontal=True
+                horizontal=True,
+                label_visibility="collapsed"
             )
             st.session_state.selected_model = model_mapping[selected_model_name]
 
@@ -266,64 +283,103 @@ def main():
     inject_custom_css()
     render_sidebar()
 
-    st.title("Chat with Documents")
-    
-    if not st.session_state.processing_complete:
-        st.info("👈 Upload your documents in the sidebar to begin.")
-        st.markdown("""
-            <div style='text-align: center; padding: 50px; color: #444746; background-color: #f8f9fa; border-radius: 24px; margin-top: 20px;'>
-                <h2 style='color: #1f1f1f; font-weight: 400;'>Hello, Human.</h2>
-                <p style='font-size: 1.1rem;'>Upload a PDF or DOCX to get started.</p>
-            </div>
-        """, unsafe_allow_html=True)
+    if st.session_state.get("mode") == "Video Summarization":
+        st.title("🎬 Video Summarization")
+        st.caption("Powered by Nvidia Nemotron")
+        
+        video_file = st.file_uploader("Upload a video", type=["mp4", "avi", "mov", "mkv"])
+        
+        if video_file:
+            # Save temp file
+            tfile = tempfile.NamedTemporaryFile(delete=False) 
+            tfile.write(video_file.read())
+            video_path = tfile.name
+            
+            st.video(video_path)
+            
+            # Check duration
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count / fps if fps > 0 else 0
+            cap.release()
+            
+            if duration > 10:
+                st.error(f"⚠️ Video is too long ({duration:.1f}s). Please upload a video shorter than 10 seconds.")
+            else:
+                if st.button("✨ Summarize Video", type="primary"):
+                    with st.spinner("Extracting frames and analyzing..."):
+                        frames = extract_frames(video_path)
+                        if frames:
+                            summary = get_video_summary(frames, os.getenv("OPENROUTER_API_KEY"))
+                            st.markdown("### 📝 Summary")
+                            st.markdown(summary)
+                        else:
+                            st.error("Could not extract frames from the video.")
+            
+            # Cleanup
+            tfile.close()
+            
     else:
-        chat_container = st.container()
+        st.title("Chat with Documents")
         
-        with chat_container:
-            for message in st.session_state.messages:
-                avatar = "✨" if message["role"] == "assistant" else "👤"
-                with st.chat_message(message["role"], avatar=avatar):
-                    st.markdown(message["content"])
-
-        # --- CHAT LOGIC WITH DISABLED INPUT ---
-        
-        # 1. Check if the LAST message is from the User (means processing needed)
-        if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-            
-            # RENDER DISABLED CHAT INPUT to show "Busy" state
-            st.chat_input("Thinking...", disabled=True)
-            
-            # Generate response immediately
-            with st.chat_message("assistant", avatar="✨"):
-                with st.spinner("Thinking..."):
-                    try:
-                        response = user_input(
-                            st.session_state.messages[-1]["content"], 
-                            st.session_state.get("selected_model", "openai/gpt-oss-20b:free"),
-                            st.session_state.session_id
-                        )
-                    except Exception as e:
-                        response = f"⚠️ An error occurred: {str(e)}"
-                    
-                    st.markdown(response)
-            
-            st.session_state.messages.append({"role": "assistant", "content": response})
-            save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id, title=None)
-            st.rerun() # Force rerun to enable the chat input again
-
-        # 2. Idle State: Show active Input
+        if not st.session_state.processing_complete:
+            st.info("👈 Upload your documents in the sidebar to begin.")
+            st.markdown("""
+                <div style='text-align: center; padding: 50px; color: #444746; background-color: #f8f9fa; border-radius: 24px; margin-top: 20px;'>
+                    <h2 style='color: #1f1f1f; font-weight: 400;'>Hello, Human.</h2>
+                    <p style='font-size: 1.1rem;'>Upload a PDF or DOCX to get started.</p>
+                </div>
+            """, unsafe_allow_html=True)
         else:
-            if prompt := st.chat_input("Ask anything about your documents..."):
-                # Add to state
-                st.session_state.messages.append({"role": "user", "content": prompt})
+            chat_container = st.container()
+            
+            with chat_container:
+                for message in st.session_state.messages:
+                    avatar = "✨" if message["role"] == "assistant" else "👤"
+                    with st.chat_message(message["role"], avatar=avatar):
+                        st.markdown(message["content"])
+
+            # --- CHAT LOGIC WITH DISABLED INPUT ---
+            
+            # 1. Check if the LAST message is from the User (means processing needed)
+            if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
                 
-                # Optimistic UI update
-                with st.chat_message("user", avatar="👤"):
-                    st.markdown(prompt)
+                # RENDER DISABLED CHAT INPUT to show "Busy" state
+                st.chat_input("Thinking...", disabled=True)
                 
-                save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
-                # Rerun immediately to switch to "Processing" state (Block 1)
-                st.rerun()
+                # Generate response immediately
+                with st.chat_message("assistant", avatar="✨"):
+                    with st.spinner("Thinking..."):
+                        try:
+                            response = user_input(
+                                st.session_state.messages[-1]["content"], 
+                                st.session_state.get("selected_model", "openai/gpt-oss-20b:free"),
+                                st.session_state.session_id
+                            )
+                        except Exception as e:
+                            response = f"⚠️ An error occurred: {str(e)}"
+                        
+                        st.markdown(response)
+                
+                st.session_state.messages.append({"role": "assistant", "content": response})
+                save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id, title=None)
+                st.rerun() # Force rerun to enable the chat input again
+
+            # 2. Idle State: Show active Input
+            else:
+                if prompt := st.chat_input("Ask anything about your documents..."):
+                    # Add to state
+                    st.session_state.messages.append({"role": "user", "content": prompt})
+                    
+                    # Optimistic UI update
+                    with st.chat_message("user", avatar="👤"):
+                        st.markdown(prompt)
+                    
+                    save_chat_session(st.session_state.session_id, st.session_state.messages, user_id=device_id)
+                    # Rerun immediately to switch to "Processing" state (Block 1)
+                    st.rerun()
 
 if __name__ == "__main__":
     main()

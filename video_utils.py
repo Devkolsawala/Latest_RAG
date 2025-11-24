@@ -1,63 +1,23 @@
-import imageio
 import base64
 import os
-import json
 import requests
+import json
 
-def extract_frames(video_path, max_frames=8):
+def get_video_summary_from_file(video_path, api_key):
     """
-    Extracts evenly distributed frames from a video using imageio
-    (OpenCV alternative compatible with Streamlit Cloud).
+    Sends an entire video file to OpenRouter Nemotron for summarization.
+    Streamlit Cloud compatible — no OpenCV, no imageio, no ffmpeg.
     """
+
     if not os.path.exists(video_path):
-        return []
+        return "Error: Video file not found."
 
-    try:
-        reader = imageio.get_reader(video_path)
-        total_frames = reader.count_frames()
-    except Exception:
-        return []
+    # Read raw video bytes
+    with open(video_path, "rb") as f:
+        video_bytes = f.read()
 
-    if total_frames <= 0:
-        return []
-
-    step = max(1, total_frames // max_frames)
-    frames = []
-
-    for i in range(0, total_frames, step):
-        try:
-            frame = reader.get_data(i)
-        except:
-            break
-
-        # Resize frame to max dimension 768
-        import numpy as np
-        from PIL import Image
-
-        img = Image.fromarray(frame)
-        width, height = img.size
-        max_dim = 768
-
-        if max(width, height) > max_dim:
-            scale = max_dim / max(width, height)
-            new_size = (int(width * scale), int(height * scale))
-            img = img.resize(new_size)
-
-        # Encode to base64
-        buffer = imageio.imwrite("<bytes>", img, format="jpg", quality=85)
-        frame_base64 = base64.b64encode(buffer).decode("utf-8")
-        frames.append(f"data:image/jpeg;base64,{frame_base64}")
-
-        if len(frames) >= max_frames:
-            break
-
-    reader.close()
-    return frames
-
-
-def get_video_summary(frames, api_key):
-    if not frames:
-        return "No frames could be extracted from the video."
+    # Base64 encode video
+    video_b64 = base64.b64encode(video_bytes).decode("utf-8")
 
     url = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -66,35 +26,46 @@ def get_video_summary(frames, api_key):
         "Content-Type": "application/json"
     }
 
-    content = [{
-        "type": "text",
-        "text": "These are sequential frames from a video. Give a detailed summary of the full action as a continuous story."
-    }]
-
-    for frame in frames:
-        content.append({
-            "type": "image_url",
-            "image_url": {
-                "url": frame
-            }
-        })
-
-    data = {
+    payload = {
         "model": "nvidia/nemotron-nano-12b-v2-vl:free",
-        "messages": [{"role": "user", "content": content}],
-        "max_tokens": 1024,
-        "temperature": 0.5
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Here is a video encoded in base64. "
+                            "Please watch it and generate a highly detailed summary "
+                            "describing the video as a continuous narrative. "
+                            "Do NOT reference frames or timestamps."
+                        )
+                    },
+                    {
+                        "type": "video_url",
+                        "video_url": {
+                            "url": f"data:video/mp4;base64,{video_b64}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "temperature": 0.4,
+        "max_tokens": 1200
     }
 
     try:
-        response = requests.post(url, headers=headers, json=data)
+        response = requests.post(url, headers=headers, json=payload)
+        
         if response.status_code != 200:
             return f"Error: {response.status_code} - {response.text}"
 
         result = response.json()
-        return result['choices'][0]['message']['content']
+        return result["choices"][0]["message"]["content"]
+
     except Exception as e:
         return f"Error generating summary: {str(e)}"
+
 
 
 

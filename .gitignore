@@ -2,3 +2,4 @@
 __pycache__
 faiss_index
 faiss_indexes
+chat_history.json

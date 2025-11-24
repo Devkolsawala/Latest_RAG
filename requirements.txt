@@ -8,7 +8,5 @@ pypdf
 python-docx
 python-dotenv
 extra-streamlit-components
-imageio
-imageio-ffmpeg
-# opencv-python
+opencv-python
 requests
